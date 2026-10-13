@@ -1,6 +1,6 @@
 # Scan 02: weather sensitivity and staffing-forecast skill
 
-Data: camera counts @ b89bc2c; weather from JMA station observations (Fukui City, Mikuni AMeDAS, Mihama AMeDAS; peak wind is the highest hourly mean), daytime 09:00 to 17:00. Outage days are excluded.
+Data: camera counts @ b89bc2c; weather from JMA station observations (Fukui City, Mikuni AMeDAS, Mihama AMeDAS; peak wind is the highest hourly mean), aggregated over each site's own active hours (hours holding at least 2% of the day's detections in that calendar month, which follow opening hours and season). Outage days are excluded.
 
 ## A. Weather effect on daily counts
 
@@ -8,9 +8,9 @@ OLS on log counts with day-of-week, holiday and year-month fixed effects, HAC er
 
 | feed | n days | per 10 mm rain | per +5 m/s peak wind | per +3 h sun | per +5 °C | R² |
 |---|---|---|---|---|---|---|
-| Fukui Station (people) | 642 | -3.2% (±2.6) | +3.2% (±5.3) | -0.4% (±1.6) | +2.4% (±2.7) | 0.68 |
-| Tojinbo (people) | 639 | -8.9% (±4.5) | -9.9% (±7.4) | +5.2% (±3.0) | +13.1% (±4.4) | 0.72 |
-| Rainbow Line lot 1 (cars) | 605 | -39.5% (±20.3) | -10.5% (±15.9) | +17.7% (±4.9) | +9.2% (±7.9) | 0.63 |
+| Fukui Station (people) | 642 | -3.3% (±2.2) | +3.9% (±5.6) | -0.4% (±1.2) | +2.5% (±2.9) | 0.68 |
+| Tojinbo (people) | 640 | -8.8% (±4.4) | -10.2% (±7.7) | +5.4% (±2.6) | +12.3% (±4.5) | 0.72 |
+| Rainbow Line lot 1 (cars) | 605 | -37.2% (±17.2) | -12.5% (±15.8) | +16.1% (±4.1) | +7.1% (±8.0) | 0.63 |
 
 ± is an approximate 95% interval.
 
@@ -22,22 +22,22 @@ Models: *naive* = same weekday last week; *calendar* = ridge on day-of-week, hol
 |---|---|---|---|---|---|
 | Fukui Station (people) | 1d | naive | 340 | 19.28 | 0.84 |
 | Fukui Station (people) | 1d | calendar | 338 | 11.88 | 0.95 |
-| Fukui Station (people) | 1d | calendar+weather | 338 | 12.11 | 0.93 |
+| Fukui Station (people) | 1d | calendar+weather | 338 | 11.98 | 0.94 |
 | Fukui Station (people) | 3d | naive | 340 | 19.28 | 0.84 |
 | Fukui Station (people) | 3d | calendar | 338 | 14.43 | 0.90 |
-| Fukui Station (people) | 3d | calendar+weather | 338 | 14.78 | 0.90 |
+| Fukui Station (people) | 3d | calendar+weather | 338 | 14.66 | 0.90 |
 | Tojinbo (people) | 1d | naive | 356 | 36.47 | 0.54 |
 | Tojinbo (people) | 1d | calendar | 353 | 23.29 | 0.73 |
-| Tojinbo (people) | 1d | calendar+weather | 353 | 21.27 | 0.76 |
+| Tojinbo (people) | 1d | calendar+weather | 353 | 20.97 | 0.76 |
 | Tojinbo (people) | 3d | naive | 356 | 36.47 | 0.54 |
 | Tojinbo (people) | 3d | calendar | 352 | 27.16 | 0.65 |
-| Tojinbo (people) | 3d | calendar+weather | 351 | 25.40 | 0.70 |
+| Tojinbo (people) | 3d | calendar+weather | 352 | 25.12 | 0.70 |
 | Rainbow Line lot 1 (cars) | 1d | naive | 301 | 41.78 | 0.44 |
 | Rainbow Line lot 1 (cars) | 1d | calendar | 295 | 33.95 | 0.51 |
-| Rainbow Line lot 1 (cars) | 1d | calendar+weather | 294 | 29.18 | 0.61 |
+| Rainbow Line lot 1 (cars) | 1d | calendar+weather | 294 | 29.36 | 0.60 |
 | Rainbow Line lot 1 (cars) | 3d | naive | 301 | 41.78 | 0.44 |
 | Rainbow Line lot 1 (cars) | 3d | calendar | 296 | 38.50 | 0.40 |
-| Rainbow Line lot 1 (cars) | 3d | calendar+weather | 295 | 33.87 | 0.53 |
+| Rainbow Line lot 1 (cars) | 3d | calendar+weather | 295 | 33.68 | 0.52 |
 
 ## C. Busy-day warning three days ahead
 
@@ -49,10 +49,10 @@ A busy day is a day in the site's top 20% (training-period threshold). For Rainb
 | Tojinbo (people): top 20% day | calendar | 352 | 0.30 | 0.91 | 0.82 | 0.64 |
 | Rainbow Line lot 1 (cars): top 20% day | calendar | 296 | 0.40 | 0.81 | 0.78 | 0.45 |
 | Rainbow Line: lot 2 in use | calendar | 297 | 0.23 | 0.87 | 0.60 | 0.55 |
-| Fukui Station (people): top 20% day | calendar+weather | 338 | 0.30 | 0.91 | 0.79 | 0.57 |
-| Tojinbo (people): top 20% day | calendar+weather | 351 | 0.30 | 0.93 | 0.87 | 0.64 |
-| Rainbow Line lot 1 (cars): top 20% day | calendar+weather | 295 | 0.40 | 0.88 | 0.88 | 0.54 |
-| Rainbow Line: lot 2 in use | calendar+weather | 296 | 0.23 | 0.89 | 0.86 | 0.64 |
+| Fukui Station (people): top 20% day | calendar+weather | 338 | 0.30 | 0.91 | 0.81 | 0.58 |
+| Tojinbo (people): top 20% day | calendar+weather | 352 | 0.30 | 0.93 | 0.88 | 0.61 |
+| Rainbow Line lot 1 (cars): top 20% day | calendar+weather | 295 | 0.40 | 0.89 | 0.86 | 0.55 |
+| Rainbow Line: lot 2 in use | calendar+weather | 296 | 0.23 | 0.91 | 0.84 | 0.68 |
 
 ## D. Counts outside opening hours (Rainbow Line road open about 08:00 to 18:00)
 
