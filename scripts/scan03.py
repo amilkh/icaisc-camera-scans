@@ -9,7 +9,7 @@ import pandas as pd
 from scipy import stats
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
-from common import DATA, WX_SITE, daily_counts, daily_weather, daytype
+from common import DATA, WX_SITE, daily_counts, daily_weather_active, daytype, active_hours
 
 warnings.filterwarnings("ignore")
 rng = np.random.default_rng(0)
@@ -31,7 +31,8 @@ START = pd.Timestamp("2025-10-13")
 def forecast_weather(site, h, h0=9, h1=17):
     fp = DATA / f"fcst7_{site}.parquet"
     f = pd.read_parquet(fp if fp.exists() else DATA / f"fcst_{site}.parquet").set_index("t0")
-    f = f[(f.index.hour >= h0) & (f.index.hour <= h1)]
+    ah = active_hours(site)
+    f = f[np.array([hr in ah[m] for m, hr in zip(f.index.month, f.index.hour)])]
     g = f.groupby(f.index.normalize())
     return pd.DataFrame({
         "rain_mm": g[f"precipitation_previous_day{h}"].sum(),
@@ -41,7 +42,7 @@ def forecast_weather(site, h, h0=9, h1=17):
     })
 
 def frame(k):
-    f = pd.DataFrame({"y": D[k]}).join(daily_weather(WX_SITE[k]), how="left")
+    f = pd.DataFrame({"y": D[k]}).join(daily_weather_active(WX_SITE[k]), how="left")
     dt = daytype(f.index)
     f["dow"] = f.index.dayofweek.astype(str)
     f["off"] = (dt.values != "weekday").astype(int)

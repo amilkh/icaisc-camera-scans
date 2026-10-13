@@ -12,7 +12,7 @@ import statsmodels.formula.api as smf
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
 import scan03 as s3
-from common import DATA, daily_weather, daytype, load
+from common import DATA, daily_weather_active, daytype, load
 
 warnings.filterwarnings("ignore")
 L = []
@@ -44,7 +44,7 @@ df["sum"] = df["plates"] + df["faces"]
 
 # A. weather effects
 p("## A. Weather effect (JMA Mihama), % change per unit\n")
-w = daily_weather("rainbow", source="jma")
+w = daily_weather_active("rainbow", source="jma")
 rows = []
 for col in ["plates", "faces", "combined"]:
     f = pd.DataFrame({"ly": np.log1p(df[col])}).join(w).dropna()

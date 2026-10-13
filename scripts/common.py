@@ -74,3 +74,44 @@ def daily_weather(site, h0=9, h1=17, source="openmeteo"):
 
 
 WX_SITE = {"station": "station", "tojinbo": "tojinbo", "rl1": "rainbow", "rl2": "rainbow"}
+
+
+WX_FEED = {"station": "station", "tojinbo": "tojinbo", "rainbow": "rl1"}
+
+
+def active_hours(site, min_share=0.02):
+    """Hours in which visitors are actually present at a site, by calendar month.
+
+    Derived from the camera itself: an hour counts as active in a month if its
+    mean share of the day's detections is at least `min_share`. This tracks
+    opening hours and their seasonal shifts without hard-coding them.
+    Returns {month: sorted list of hours}.
+    """
+    s = fivemin(WX_FEED[site]).set_index("t0")["count"]
+    h = s.resample("h").sum()
+    day = h.groupby(h.index.normalize()).transform("sum")
+    share = (h / day.replace(0, np.nan)).dropna()
+    prof = share.groupby([share.index.month, share.index.hour]).mean()
+    out = {}
+    for m in range(1, 13):
+        p = prof.loc[m] if m in prof.index.get_level_values(0) else None
+        out[m] = sorted(p[p >= min_share].index.tolist()) if p is not None else list(range(9, 18))
+    return out
+
+
+def daily_weather_active(site, source="openmeteo"):
+    """Daily weather aggregated over the site's active hours (see active_hours)."""
+    prefix = "weather" if source == "openmeteo" else "jma"
+    w = pd.read_parquet(DATA / f"{prefix}_{site}.parquet").set_index("t0")
+    ah = active_hours(site)
+    mask = np.array([hr in ah[m] for m, hr in zip(w.index.month, w.index.hour)])
+    w = w[mask]
+    g = w.groupby(w.index.normalize())
+    return pd.DataFrame({
+        "rain_mm": g["precipitation"].sum(min_count=3),
+        "snow_cm": g["snowfall"].sum(),
+        "wind_ms": g["wind_speed_10m"].mean(),
+        "gust_ms": g["wind_gusts_10m"].max(),
+        "temp_c": g["temperature_2m"].mean(),
+        "sun_h": g["sunshine_duration"].sum(min_count=3) / 3600,
+    })

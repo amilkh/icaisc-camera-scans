@@ -10,7 +10,7 @@ import pandas as pd
 import statsmodels.formula.api as smf
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import roc_auc_score
-from common import WX_SITE, daily_counts, daily_weather, daytype, fivemin
+from common import WX_SITE, daily_counts, daily_weather_active, daytype, fivemin
 
 warnings.filterwarnings("ignore")
 SOURCE = sys.argv[1] if len(sys.argv) > 1 else "openmeteo"
@@ -29,7 +29,7 @@ FEEDS = ["station", "tojinbo", "rl1"]
 NAMES = {"station": "Fukui Station (people)", "tojinbo": "Tojinbo (people)", "rl1": "Rainbow Line lot 1 (cars)"}
 
 def frame(k):
-    w = daily_weather(WX_SITE[k], source=SOURCE)
+    w = daily_weather_active(WX_SITE[k], source=SOURCE)
     f = pd.DataFrame({"y": D[k]}).join(w, how="left")
     dt = daytype(f.index)
     f["dow"] = f.index.dayofweek.astype(str)
@@ -41,7 +41,7 @@ def frame(k):
     return f
 
 p("# Scan 02: weather sensitivity and staffing-forecast skill\n")
-p(f"Data: camera counts @ b89bc2c; weather from {SRC_TXT}, daytime 09:00 to 17:00. Outage days are excluded.\n")
+p(f"Data: camera counts @ b89bc2c; weather from {SRC_TXT}, aggregated over each site's own active hours (hours holding at least 2% of the day's detections in that calendar month, which follow opening hours and season). Outage days are excluded.\n")
 
 # A. weather elasticities
 p("## A. Weather effect on daily counts\n")
