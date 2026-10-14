@@ -79,7 +79,10 @@ WX_SITE = {"station": "station", "tojinbo": "tojinbo", "rl1": "rainbow", "rl2": 
 WX_FEED = {"station": "station", "tojinbo": "tojinbo", "rainbow": "rl1"}
 
 
-def active_hours(site, min_share=0.02):
+TEST_START = pd.Timestamp("2025-10-13")
+
+
+def active_hours(site, min_share=0.02, cutoff=TEST_START, fallback=range(9, 18)):
     """Hours in which visitors are actually present at a site, by calendar month.
 
     Derived from the camera itself: an hour counts as active in a month if its
@@ -88,6 +91,7 @@ def active_hours(site, min_share=0.02):
     Returns {month: sorted list of hours}.
     """
     s = fivemin(WX_FEED[site]).set_index("t0")["count"]
+    s = s[s.index < cutoff]  # frozen before the test year: no test-period counts shape the window
     h = s.resample("h").sum()
     day = h.groupby(h.index.normalize()).transform("sum")
     share = (h / day.replace(0, np.nan)).dropna()
@@ -95,7 +99,7 @@ def active_hours(site, min_share=0.02):
     out = {}
     for m in range(1, 13):
         p = prof.loc[m] if m in prof.index.get_level_values(0) else None
-        out[m] = sorted(p[p >= min_share].index.tolist()) if p is not None else list(range(9, 18))
+        out[m] = sorted(p[p >= min_share].index.tolist()) if p is not None else list(fallback)
     return out
 
 

@@ -124,8 +124,11 @@ def busy_eval(k, label, mode, h=3):
             probs.append(pd.Series(mdl.predict_proba(Xte.loc[idx][te])[:, 1], index=idx[te])); labs.append(lab.loc[idx][te])
     pr, yb = pd.concat(probs), pd.concat(labs).astype(int)
     aucs = []
-    for _ in range(1000):
-        s = rng.integers(0, len(yb), len(yb))
+    weeks = pr.index.to_period("W").unique()
+    wk = pr.index.to_period("W")
+    for _ in range(1000):  # resample calendar weeks jointly for predictions and labels
+        pick = rng.choice(len(weeks), len(weeks), replace=True)
+        s = np.concatenate([np.where(wk == weeks[i])[0] for i in pick])
         if yb.iloc[s].nunique() == 2:
             aucs.append(roc_auc_score(yb.iloc[s], pr.iloc[s]))
     hit = pr >= 0.5; tp = (hit & (yb == 1)).sum()

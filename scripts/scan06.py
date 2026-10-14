@@ -3,7 +3,7 @@ Gate cameras count plates (vehicles) and faces (people in or near vehicles).
 Build three daily series for lots 1+2: plates, faces, and a combined people
 index (faces where available, else plates x median faces-per-plate), and run
 the weather effect, 1/3-day forecasts and busy-day warnings on each.
-Writes ../out/20261013_rainbow_faces_plates.md.
+Writes ../out/20261013_rainbow_faces_plates.md. Outage rule by Mohammed Sohail (14 Oct).
 """
 import warnings
 import numpy as np
@@ -30,12 +30,18 @@ def daily(site, cls):
     tot[n < 0.8 * 288] = np.nan
     return tot
 S1, S2 = "rainbow-line-parking-lot-1-gate", "rainbow-line-parking-lot-2-gate"
-plates = daily(S1, "LicensePlate").add(daily(S2, "LicensePlate"), fill_value=0)
-faces = daily(S1, "Face").add(daily(S2, "Face"), fill_value=0)
+# Outage rule as in the paper (common.daily_counts): a day needs >=80% of 5-min bins at both
+# gates, and lot 1 must be counting (lot-1 plates > 0); a lot-2 zero is a real zero only then.
+# (scan06 originally added the lots with fill_value=0 and dropped a day only if plates and
+# faces were both zero, so a lot-1 outage with lot-2 activity entered as a valid day.)
+p1, p2 = daily(S1, "LicensePlate"), daily(S2, "LicensePlate")
+f1, f2 = daily(S1, "Face"), daily(S2, "Face")
+idx = p1.index.union(p2.index).union(f1.index).union(f2.index)
+p1, p2, f1, f2 = (s.reindex(idx) for s in (p1, p2, f1, f2))
+lot1_on = p1 > 0
+plates = (p1 + p2).where(lot1_on)
+faces = (f1 + f2).where(lot1_on)
 df = pd.DataFrame({"plates": plates, "faces": faces}).asfreq("D")
-# outage: both zero
-out = (df["plates"] == 0) & (df["faces"] == 0)
-df[out] = np.nan
 ratio = (df["faces"] / df["plates"].replace(0, np.nan))
 p("# Rainbow Line: faces and plates combined (lots 1 + 2)\n")
 p(f"Valid days {df.dropna().shape[0]}. Median faces per plate {ratio.median():.2f} (IQR {ratio.quantile(.25):.2f} to {ratio.quantile(.75):.2f}); daily correlation plates vs faces r = {df['plates'].corr(df['faces']):.2f}, log r = {np.log1p(df['plates']).corr(np.log1p(df['faces'])):.2f}.\n")

@@ -50,14 +50,15 @@ rows = []
 for k in FEEDS:
     f = frame(k).dropna(subset=["ly", "rain_mm"])
     m = smf.ols("ly ~ C(dow) + hol + C(ym) + rain_mm + gust_ms + sun_h + temp_c", f).fit(cov_type="HAC", cov_kwds={"maxlags": 7})
-    def eff(v, scale): 
+    def eff(v, scale):
         b, se = m.params[v] * scale, m.bse[v] * scale
-        return f"{100*(np.exp(b)-1):+.1f}% (±{196*se:.1f})"
+        lo, hi = 100 * (np.exp(b - 1.96 * se) - 1), 100 * (np.exp(b + 1.96 * se) - 1)
+        return f"{100*(np.exp(b)-1):+.1f}% [{lo:+.1f}, {hi:+.1f}]"
     rows.append({"feed": NAMES[k], "n days": int(m.nobs), "per 10 mm rain": eff("rain_mm", 10),
-                 "per +5 m/s peak wind": eff("gust_ms", 5), "per +3 h sun": eff("sun_h", 3),
+                 "per +5 m/s peak hourly wind": eff("gust_ms", 5), "per +3 h sun": eff("sun_h", 3),
                  "per +5 °C": eff("temp_c", 5), "R²": m.rsquared})
 tbl(pd.DataFrame(rows).set_index("feed"))
-p("± is an approximate 95% interval.\n")
+p("Brackets: 95% interval, endpoints transformed from the log(1+y) scale.\n")
 
 # B. forecast skill at 1 and 3 days ahead
 p("## B. Daily forecast skill, rolling origin (weekly refit, test 2025-10-13 to 2026-10-10)\n")

@@ -106,35 +106,56 @@ for name, fn, ex in [("plates ≥20 (original)", lot2_plates, None), ("plates �
         rows.append({"label": name, "weather": "forecast" if wx else "none", **r})
 B = pd.DataFrame(rows).set_index("label"); tbl(B)
 
-# ---------- C. classical baselines ----------
-p("## C. Classical baselines (WAPE %, within ±30% in brackets)\n")
-p("ETS: Holt-Winters on log counts, additive weekly seasonality, damped trend. SARIMAX(1,0,1)(1,0,1)7 on log counts with forecast weather as exogenous inputs. Both refit weekly on data up to the forecast origin; outage days are interpolated in training only.\n")
+# ---------- C. classical baselines, true h-day lead (method by Mohammed Sohail, 14 Oct) ----------
+p("## C. Classical baselines with a true h-day lead (WAPE %, within ±30% in brackets)\n")
+p("ETS: Holt-Winters on log(1+y), additive weekly seasonality, damped additive trend. SARIMAX(1,0,1)(1,0,1)7 on log(1+y) with forecast weather as exogenous inputs. Parameters are refit weekly on data before the Monday cutoff; for each target day the fitted model is then run over counts up to d-h and forecasts exactly h steps, as ridge does. SARIMAX receives the weather forecast issued at d-h for each future day; days with a missing forecast are skipped. Training gaps are interpolated.\n")
+DAY = pd.Timedelta(days=1)
+def ets_known(series, res):
+    """Run Holt-Winters with the weekly fit's parameters and initial states over a longer series."""
+    pr = res.params
+    m = ExponentialSmoothing(series, trend="add", damped_trend=True, seasonal="add", seasonal_periods=7,
+                             initialization_method="known", initial_level=pr["initial_level"],
+                             initial_trend=pr["initial_trend"], initial_seasonal=pr["initial_seasons"])
+    return m.fit(smoothing_level=pr["smoothing_level"], smoothing_trend=pr["smoothing_trend"],
+                 smoothing_seasonal=pr["smoothing_seasonal"], damping_trend=pr["damping_trend"], optimized=False)
+
+
 def classical(k, h, kind):
-    f = s3.frame(k); ly = f["ly"].asfreq("D")
-    obs = f[s3.WX].asfreq("D"); fc = s3.forecast_weather(s3.WX_SITE[k], h).reindex(ly.index)
+    f = s3.frame(k); ly = f["ly"].asfreq("D"); obs = f[s3.WX].asfreq("D")
+    fc = {j: s3.forecast_weather(s3.WX_SITE[k], j).reindex(ly.index) for j in range(1, h + 1)}
     preds = {}
     for monday in pd.date_range(START, END, freq="W-MON"):
-        origin = monday - pd.Timedelta(days=h)
-        hist = ly[:origin - pd.Timedelta(days=1)].interpolate(limit_direction="both")
-        steps = (monday + pd.Timedelta(days=6) - hist.index[-1]).days
+        fit_end = monday - pd.Timedelta(days=h) - DAY          # same training data as scan05
+        hist = ly[:fit_end].interpolate(limit_direction="both")
         try:
             if kind == "ets":
-                m = ExponentialSmoothing(hist.values, trend="add", damped_trend=True, seasonal="add", seasonal_periods=7).fit()
-                fcv = m.forecast(steps)
+                res = ExponentialSmoothing(hist.values, trend="add", damped_trend=True, seasonal="add",
+                                           seasonal_periods=7).fit()
             else:
-                ex_hist = obs.loc[hist.index].interpolate(limit_direction="both").values
-                fut_idx = pd.date_range(hist.index[-1] + pd.Timedelta(days=1), periods=steps)
-                ex_fut = obs.reindex(fut_idx).copy()
-                fcw = fc.reindex(fut_idx)
-                ex_fut[fcw.notna().all(1)] = fcw[fcw.notna().all(1)]
-                m = SARIMAX(hist.values, exog=ex_hist, order=(1, 0, 1), seasonal_order=(1, 0, 1, 7), trend="c").fit(disp=False, maxiter=200)
-                fcv = m.forecast(steps, exog=ex_fut.interpolate(limit_direction="both").values)
+                ex = obs.loc[hist.index].interpolate(limit_direction="both").values
+                res = SARIMAX(hist.values, exog=ex, order=(1, 0, 1), seasonal_order=(1, 0, 1, 7),
+                              trend="c").fit(disp=False, maxiter=200)
         except Exception:
             continue
-        idx = pd.date_range(hist.index[-1] + pd.Timedelta(days=1), periods=steps)
-        s = pd.Series(np.expm1(fcv), index=idx).loc[monday: monday + pd.Timedelta(days=6)]
-        preds.update(s.to_dict())
+        for d in pd.date_range(monday, monday + pd.Timedelta(days=6)):
+            if d > END:
+                break
+            avail = ly[:d - pd.Timedelta(days=h)].interpolate(limit_direction="both")   # known at issue time
+            try:
+                if kind == "ets":
+                    fcv = ets_known(avail.values, res).forecast(h)
+                else:
+                    fut = pd.date_range(avail.index[-1] + DAY, periods=h)
+                    exf = pd.DataFrame([fc[j].loc[t] for j, t in zip(range(1, h + 1), fut)])
+                    if exf.isna().any().any():
+                        continue
+                    exh = obs.loc[avail.index].interpolate(limit_direction="both").values
+                    fcv = res.apply(avail.values, exog=exh).forecast(h, exog=exf.values)
+            except Exception:
+                continue
+            preds[d] = float(np.expm1(fcv[-1]))
     return pd.Series(preds)
+
 
 rows = []
 for k in s3.FEEDS:
@@ -157,7 +178,7 @@ for k in s3.FEEDS:
             e = (v.reindex(idx) - yy).abs()
             row[m] = f"{100 * e.sum() / yy.sum():.1f} ({(e / yy < 0.3).mean():.2f})"
         rows.append(row)
-        print(k, h, "classical done", flush=True)
+        print(k, h, "done", flush=True)
 C = pd.DataFrame(rows).set_index("site"); tbl(C)
 
 # ---------- D. nested evaluation ----------
