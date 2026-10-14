@@ -11,3 +11,12 @@ Covered separately in the paper repository, so not repeated here: cold-start hou
 ## Data and licence
 
 Camera counts: code4fukui/fukui-kanko-people-flow-data (MIT), pinned at b89bc2c. Weather: JMA station observations and the Open-Meteo archive and previous-runs API. Code: MIT.
+
+
+## Cold start
+
+`coldstart/` holds the cold-start experiment (Table VII, Fig. 4) by Mohammed Sohail, with its outputs. The classical baselines at a true h-day lead (`scan05.py` section C) and the outage rule in `scan06.py` are also his.
+
+## Weather notes
+
+JMA observations come from the DHDE study files plus monthly pages fetched with `fetch_jma_monthly.py` from that repository; `get_jma.py` merges them and treats the main station's "--" rain marker as zero. Open-Meteo observed weather and the previous-runs forecast archive are fetched by `get_weather.py` and `get_forecasts.py`. The active-hours window is estimated from pre-test counts only (`common.active_hours`).
