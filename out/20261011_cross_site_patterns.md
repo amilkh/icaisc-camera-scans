@@ -9,7 +9,7 @@ Outage days (zero or <80% of 5-min bins) are excluded.
 | station | 642 | 8,343 | 20,408 |
 | tojinbo | 641 | 8,173 | 33,586 |
 | rl1 | 607 | 174 | 540 |
-| rl2 | 237 | 20 | 376 |
+| rl2 | 607 | 0 | 376 |
 
 ## B. Weekend and holiday uplift (median ÷ weekday median)
 
@@ -18,7 +18,7 @@ Outage days (zero or <80% of 5-min bins) are excluded.
 | station | 1.49 | 1.65 |
 | tojinbo | 2.07 | 2.35 |
 | rl1 | 1.84 | 2.20 |
-| rl2 | 52.00 | 97.00 |
+| rl2 | inf | inf |
 
 ## C. Cross-site daily correlation
 
@@ -26,19 +26,19 @@ Raw log counts:
 
 |  | station | tojinbo | rl1 | rl2 |
 |---|---|---|---|---|
-| station | 1.00 | 0.78 | 0.50 | 0.69 |
-| tojinbo | 0.78 | 1.00 | 0.64 | 0.74 |
-| rl1 | 0.50 | 0.64 | 1.00 | 0.62 |
-| rl2 | 0.69 | 0.74 | 0.62 | 1.00 |
+| station | 1.00 | 0.78 | 0.50 | 0.55 |
+| tojinbo | 0.78 | 1.00 | 0.64 | 0.60 |
+| rl1 | 0.50 | 0.64 | 1.00 | 0.44 |
+| rl2 | 0.55 | 0.60 | 0.44 | 1.00 |
 
 Residuals after weekday x month means, holidays excluded (shared shocks such as weather):
 
 |  | station | tojinbo | rl1 | rl2 |
 |---|---|---|---|---|
-| station | 1.00 | 0.57 | 0.29 | 0.15 |
-| tojinbo | 0.57 | 1.00 | 0.44 | 0.38 |
-| rl1 | 0.29 | 0.44 | 1.00 | 0.27 |
-| rl2 | 0.15 | 0.38 | 0.27 | 1.00 |
+| station | 1.00 | 0.57 | 0.29 | 0.23 |
+| tojinbo | 0.57 | 1.00 | 0.44 | 0.35 |
+| rl1 | 0.29 | 0.44 | 1.00 | 0.29 |
+| rl2 | 0.23 | 0.35 | 0.29 | 1.00 |
 
 ## D. Hourly lead-lag (residual cross-correlation, 09:00 to 17:00)
 
@@ -123,8 +123,8 @@ Origin mix on quiet versus busy days (unweighted daily means):
 
 | lot 1 plates/day | days | rl2_median | rl2_share |
 |---|---|---|---|
-| (0.999, 111.0] | 48.00 | 1.00 | 0.02 |
-| (111.0, 202.0] | 48.00 | 1.50 | 0.01 |
-| (202.0, 296.0] | 46.00 | 19.50 | 0.07 |
-| (296.0, 377.0] | 47.00 | 81.00 | 0.19 |
-| (377.0, 540.0] | 47.00 | 94.00 | 0.18 |
+| (0.999, 78.0] | 123.00 | 0.00 | 0.00 |
+| (78.0, 146.2] | 119.00 | 0.00 | 0.00 |
+| (146.2, 202.0] | 123.00 | 0.00 | 0.00 |
+| (202.0, 294.0] | 119.00 | 0.00 | 0.00 |
+| (294.0, 540.0] | 120.00 | 62.00 | 0.14 |
