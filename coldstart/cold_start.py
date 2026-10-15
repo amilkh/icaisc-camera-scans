@@ -15,21 +15,22 @@ naive_week   same hour, same weekday last week (falls back to yesterday, then 0)
 profile      mean of log counts by (hour, day-off flag) over visible history
 ridge        Ridge on log1p: hour x day-off profile, lags, weather
 ridge_noweather  same, without weather (ablation)
-blend        ridge shrunk toward naive_week, weight min(days/56, 1)
+blend        ridge shrunk toward naive_week, weight min(n/56, 1) for n days of history
 blend_noweather  same, shrinking ridge_noweather (needs no weather at all)
 blend_fcst   same as blend, but test-day weather is the archived day-ahead forecast
 gbm          histogram gradient boosting on the ridge features
 
 Weather for ridge/blend/gbm uses observed JMA hourly values for the target day (a perfect
 forecast). blend_fcst is the ex-ante check: it trains on observed weather but forecasts with
-the Open-Meteo forecast issued the day before (scripts/get_cold_start_forecasts.py), as in
-the main forecast-weather test.
+the Open-Meteo forecast issued the day before (previous_day1 in data/fcst7_<site>.parquet),
+as in the main forecast-weather test.
 
-Run from repo root:  python scripts/cold_start.py
-Inputs:  ../src/pf-data/daily/<site>/Person/YYYY/MM/YYYY-MM-DD.csv  (code4fukui @ b89bc2c)
-         ../data/weather/<node>_hourly.csv                          (JMA via DHDE S3 raw)
-         ../data/weather/<node>_fcst_day1.csv                       (Open-Meteo previous runs)
-Outputs: data/cold_start_results.csv, figures/cold_start_*.pdf, tables/cold_start.tex
+Run from the repo root:  python coldstart/cold_start.py
+Inputs (built by scripts/build_data.py, get_jma.py and get_forecasts.py, as for the scans):
+  data/5min_<site>_Person.parquet   camera counts, code4fukui @ b89bc2c
+  data/jma_<site>.parquet           JMA hourly observations (hour starting)
+  data/fcst7_<site>.parquet         Open-Meteo previous-runs forecasts
+Outputs (in coldstart/): cold_start_results.csv, cold_start_ci.csv, cold_start.png/pdf (Fig. 4)
 """
 from pathlib import Path
 
@@ -43,10 +44,10 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.linear_model import Ridge
 
-ROOT = Path(__file__).resolve().parents[1]
-PF = ROOT.parent / "src" / "pf-data" / "daily"
-WX = ROOT.parent / "data" / "weather"
+HERE = Path(__file__).resolve().parent
+DATA = HERE.parent / "data"
 SITES = {"fukui-station-east-entrance": "fukui_station", "tojinbo-shotaro": "tojinbo"}
+WX_SITE = {"fukui_station": "station", "tojinbo": "tojinbo"}  # data/jma_<x>, data/fcst7_<x>
 LABEL = {"fukui_station": "Fukui Station", "tojinbo": "Tojinbo"}
 HISTORY = [3, 7, 14, 28, 56, 91, 182, 365]
 WINDOW = 28
@@ -56,10 +57,8 @@ WX_COLS = ["rain", "temp", "temp2"]
 
 
 def load_counts(site):
-    files = sorted((PF / site / "Person").rglob("*.csv"))
-    df = pd.concat(pd.read_csv(f, usecols=["aggregate from", "total count"]) for f in files)
-    df["ts"] = pd.to_datetime(df["aggregate from"])
-    s = df.drop_duplicates("ts", keep="last").set_index("ts")["total count"].astype(float)
+    d = pd.read_parquet(DATA / f"5min_{site}_Person.parquet").set_index("t0")["count"]
+    s = d.resample("h").sum(min_count=1).astype(float)   # hourly totals; hours with no bins stay NaN
     s = s.reindex(pd.date_range(s.index.min().normalize(), s.index.max().normalize()
                                 + pd.Timedelta(hours=23), freq="h"))
     # Outage days: daily total 0, or under 15% of the trailing 28-day median.
@@ -71,12 +70,13 @@ def load_counts(site):
 
 
 def load_weather(node):
-    w = pd.read_csv(WX / f"{node}_hourly.csv", parse_dates=["timestamp"]).set_index("timestamp")
-    # JMA stamps the hour ending; shift to hour starting to align with the camera bins.
-    w.index = w.index - pd.Timedelta(hours=1)
-    # JMA marks missing or not-observed values with "--" and similar symbols.
-    w = w[["temp_c", "precip_1h_mm"]].apply(pd.to_numeric, errors="coerce")
-    f = pd.read_csv(WX / f"{node}_fcst_day1.csv", parse_dates=["timestamp"]).set_index("timestamp")
+    # JMA hourly observations, already shifted to hour starting by scripts/get_jma.py.
+    j = pd.read_parquet(DATA / f"jma_{WX_SITE[node]}.parquet").set_index("t0")
+    w = pd.DataFrame({"temp_c": j["temperature_2m"], "precip_1h_mm": j["precipitation"]})
+    # Day-ahead forecast (issued the day before), same convention as scan03.forecast_weather.
+    f = pd.read_parquet(DATA / f"fcst7_{WX_SITE[node]}.parquet").set_index("t0")
+    f = pd.DataFrame({"fc_temp_c": f["temperature_2m_previous_day1"],
+                      "fc_precip_1h_mm": f["precipitation_previous_day1"]})
     return w.join(f, how="outer")
 
 
@@ -170,7 +170,8 @@ def forecast(df, model, vis_start, test_days):
         z = np.log1p(visible_y)
         naive = z.shift(168).reindex(test.index).fillna(z.shift(24).reindex(test.index))
         naive = naive.fillna(pd.Series(bt, index=test.index)).values
-        w = min(len(vis) / 24 / 56.0, 1.0)
+        n_days = (test_days[0] - vis_start).days   # nominal days of history, as in the paper
+        w = min(n_days / 56.0, 1.0)
         return np.expm1(w * (bt + m.predict(Xt[cols])) + (1 - w) * naive)
     raise ValueError(model)
 
@@ -224,14 +225,14 @@ def main():
                         daily.append((node, n, m, d.date(), r.abs_err, r.y))
     res = pd.DataFrame(rows, columns=["node", "origin", "history_days", "model", "wape",
                                       "peak_precision", "peak_recall", "peak_f1", "peak_threshold"])
-    res.to_csv(ROOT / "data" / "cold_start_results.csv", index=False)
+    res.to_csv(HERE / "cold_start_results.csv", index=False)
     summary = res.groupby(["node", "model", "history_days"])[["wape", "peak_f1"]].mean().round(3)
     print(summary.unstack("history_days").to_string())
     daily = pd.DataFrame(daily, columns=["node", "history_days", "model", "day", "abs_err", "y"])
     ci = bootstrap_gain(daily)
-    ci.to_csv(ROOT / "data" / "cold_start_ci.csv", index=False)
+    ci.to_csv(HERE / "cold_start_ci.csv", index=False)
     print(ci.to_string(index=False))
-    plot(res)
+    plot_fig4(ci)
 
 
 def bootstrap_gain(daily, reps=2000, seed=0):
@@ -256,35 +257,29 @@ def bootstrap_gain(daily, reps=2000, seed=0):
                                       "weeks"]).round(2)
 
 
-def plot(res):
-    colors = {"naive_week": "#2a78d6", "profile": "#eb6834", "ridge": "#1baf7a", "blend": "#eda100",
-              "gbm": "#e87ba4"}
-    marker = {"naive_week": "o", "profile": "s", "ridge": "^", "blend": "D", "gbm": "v"}
-    name = {"naive_week": "Same hour last week", "profile": "Hourly profile", "ridge": "Ridge (+weather)",
-            "blend": "Ridge shrunk to naive", "gbm": "Gradient boosting"}
+def plot_fig4(ci):
+    """Fig. 4: pooled hourly WAPE against days of history (naive, ridge, shrunk)."""
+    c = ci[ci.variant == "blend"]
+    series = [("wape_naive", "Same hour last week", "#2a78d6", "o"),
+              ("wape_ridge", "Ridge", "#eb6834", "s"),
+              ("wape_blend", "Shrunk", "#1baf7a", "D")]
     plt.rcParams.update({"font.size": 8, "font.family": "serif"})
-    for metric, ylab in [("wape", "Hourly WAPE (%)"), ("peak_f1", "Peak-hour F1")]:
-        fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.3), sharey=True)
-        for ax, node in zip(axes, ["fukui_station", "tojinbo"]):
-            g = res[res.node == node].groupby(["model", "history_days"])[metric].mean()
-            for m in colors:
-                v = g.loc[m] * (100 if metric == "wape" else 1)
-                ax.plot(v.index, v.values, marker=marker[m], ms=4, lw=1.5, color=colors[m], label=name[m])
-            ax.set_xscale("log")
-            ax.set_xticks(HISTORY)
-            ax.set_xticklabels(HISTORY)
-            ax.set_title(LABEL[node], fontsize=8)
-            ax.set_xlabel("Days of history")
-            ax.yaxis.grid(True, color="#e5e5e5", lw=0.5)
-            for sp in ["top", "right"]:
-                ax.spines[sp].set_visible(False)
-        axes[0].set_ylabel(ylab)
-        axes[0].legend(frameon=False, fontsize=7)
-        fig.tight_layout()
-        fig.savefig(ROOT / "figures" / f"cold_start_{metric}.pdf", bbox_inches="tight")
-        fig.savefig(ROOT / "figures" / f"cold_start_{metric}.png", dpi=170, bbox_inches="tight")
-        plt.close(fig)
-
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.4), sharey=False)
+    for ax, node in zip(axes, ["fukui_station", "tojinbo"]):
+        g = c[c.node == node].sort_values("history_days")
+        for col, name, color, mk in series:
+            ax.plot(g.history_days, g[col], marker=mk, ms=4, lw=1.5, color=color, label=name)
+        ax.set_xscale("log"); ax.set_xticks(HISTORY); ax.set_xticklabels(HISTORY)
+        ax.set_title(LABEL[node], fontsize=8); ax.set_xlabel("Days of history")
+        ax.yaxis.grid(True, color="#e5e5e5", lw=0.5)
+        for sp in ["top", "right"]:
+            ax.spines[sp].set_visible(False)
+    axes[0].set_ylabel("Hourly WAPE (%)")
+    axes[0].legend(frameon=False, fontsize=7)
+    fig.tight_layout()
+    fig.savefig(HERE / "cold_start.pdf", bbox_inches="tight")
+    fig.savefig(HERE / "cold_start.png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
 
 if __name__ == "__main__":
     main()
