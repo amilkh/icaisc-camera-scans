@@ -81,6 +81,33 @@ def run(k, h, mode):
             preds.append(pd.Series(np.expm1(mdl.predict(Xt[good])), index=idx[good]))
     return pd.concat(preds), f["y"]
 
+def gain_kept(w_cal, w_fcst, w_obs):
+    """Share of the observed-weather WAPE gain over calendar that the issued forecast keeps.
+    NaN where observed weather does not beat calendar, so there is no gain to keep."""
+    gain = w_cal - w_obs
+    return (w_cal - w_fcst) / gain if gain > 0 else np.nan
+
+def gain_kept_ci(y, cal, fcst, obs, B=2000, block=7, seed=1):
+    """95% weekly block-bootstrap interval for gain_kept, as in block_boot. Uses its own
+    generator so the existing intervals keep their random draws. Resamples where observed
+    weather does not beat calendar are dropped; returns (lo, hi, share of resamples kept)."""
+    g = np.random.default_rng(seed)
+    idx = np.arange(len(y)); nb = int(np.ceil(len(y) / block)); out = []
+    ec, ef, eo = np.abs(cal - y), np.abs(fcst - y), np.abs(obs - y)
+    for _ in range(B):
+        starts = g.integers(0, len(y) - block + 1, nb)
+        s = np.concatenate([idx[s:s + block] for s in starts])[:len(y)]
+        gain = ec[s].sum() - eo[s].sum()
+        if gain > 0:
+            out.append((ec[s].sum() - ef[s].sum()) / gain)
+    if len(out) < B / 2:
+        return np.nan, np.nan, len(out) / B
+    lo, hi = np.percentile(out, [2.5, 97.5])
+    return lo, hi, len(out) / B
+
+def fmt_kept(k, lo, hi):
+    return "n/a" if np.isnan(k) else f"{100 * k:.0f}% [{100 * lo:.0f}, {100 * hi:.0f}]" if not np.isnan(lo) else f"{100 * k:.0f}%"
+
 def dm_test(e1, e2, lag=7):
     """Diebold-Mariano on absolute errors with Newey-West variance. Negative = model 2 better."""
     d = (np.abs(e2) - np.abs(e1)).dropna()
@@ -152,12 +179,17 @@ def main():
             within = {m: (np.abs(P[m][0].loc[common].values - yy) / yy < 0.3).mean() for m in P}
             t, pv = dm_test(pd.Series(P["calendar"][0].loc[common].values - yy), pd.Series(P["forecast"][0].loc[common].values - yy))
             lo, hi = block_boot(yy, P["forecast"][0].loc[common].values, P["calendar"][0].loc[common].values)
+            kept = gain_kept(w["calendar"], w["forecast"], w["observed"])
+            klo, khi, _ = gain_kept_ci(yy, P["calendar"][0].loc[common].values, P["forecast"][0].loc[common].values,
+                                       P["observed"][0].loc[common].values) if not np.isnan(kept) else (np.nan, np.nan, 0)
             rows.append({"site": NAMES[k], "h": f"{h}d", "days": len(common),
                          "WAPE calendar": w["calendar"], "WAPE +forecast wx": w["forecast"], "WAPE +observed wx": w["observed"],
                          "change (pts) [95% CI]": f"{w['forecast']-w['calendar']:+.1f} [{lo:+.1f}, {hi:+.1f}]",
                          "DM t (p)": f"{t:+.2f} ({pv:.3f})",
-                         "within ±30%, forecast wx": within["forecast"]})
+                         "within ±30%, forecast wx": within["forecast"],
+                         "observed-wx gain kept [95% CI]": fmt_kept(kept, klo, khi)})
     p("## A. Daily count forecasts\n"); tbl(pd.DataFrame(rows).set_index("site"))
+    p("*Observed-wx gain kept* = (WAPE calendar - WAPE +forecast wx) / (WAPE calendar - WAPE +observed wx): the share of the gain from perfectly known weather that the forecast issued h days earlier delivers; n/a where observed weather does not beat calendar. Interval: 2,000 weekly block-bootstrap resamples of the test days, dropping resamples where observed weather does not beat calendar.\n")
 
     rows = []
     for k, label, name in [("station", "top", "Fukui Station: top-20% day"), ("tojinbo", "top", "Tojinbo: top-20% day"),
