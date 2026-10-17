@@ -18,9 +18,17 @@ Shrinkage weight: w = min(n / 56, 1), where n is the number of days of history, 
 shrunk model equals ridge from 56 days on.
 
 The peak threshold for the hourly peak F1 is fixed: the 90th percentile of daytime
-(08:00 to 19:00) hours in calendar 2025.
+(08:00 to 19:00) hours in calendar 2025. `cold_start_peak_f1.csv` gives the mean peak F1 per site,
+model and history length; the best values (0.43 at Fukui Station, 0.63 at Tojinbo, both
+gradient boosting) are the "about 0.4 and 0.6" in Section V-D.
 
-Outputs: `cold_start_results.csv` (per window and history length), `cold_start_ci.csv`
+Outage rule: cold start uses its own hourly rule. A day is excluded if its total is zero,
+if fewer than 20 hours have counts, or if its total is under 15% of the trailing 28-day
+median. This differs from the daily scans' rule (at least 80% of the 288 five-minute bins),
+because the hourly models need whole days with a plausible level.
+
+Outputs: `cold_start_results.csv` (per window and history length), `cold_start_peak_f1.csv`
+(hourly peak F1), `cold_start_ci.csv`
 (pooled WAPE and weekly block-bootstrap intervals for shrunk minus naive, for the
 observed-weather, no-weather and forecast-weather variants), `cold_start.pdf/png`
 (Fig. 4).

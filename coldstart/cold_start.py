@@ -30,7 +30,8 @@ Inputs (built by scripts/build_data.py, get_jma.py and get_forecasts.py, as for 
   data/5min_<site>_Person.parquet   camera counts, code4fukui @ b89bc2c
   data/jma_<site>.parquet           JMA hourly observations (hour starting)
   data/fcst7_<site>.parquet         Open-Meteo previous-runs forecasts
-Outputs (in coldstart/): cold_start_results.csv, cold_start_ci.csv, cold_start.png/pdf (Fig. 4)
+Outputs (in coldstart/): cold_start_results.csv, cold_start_ci.csv, cold_start_peak_f1.csv,
+  cold_start.png/pdf (Fig. 4)
 """
 from pathlib import Path
 
@@ -228,6 +229,13 @@ def main():
     res.to_csv(HERE / "cold_start_results.csv", index=False)
     summary = res.groupby(["node", "model", "history_days"])[["wape", "peak_f1"]].mean().round(3)
     print(summary.unstack("history_days").to_string())
+    # Hourly peak warnings (Section V-D): mean peak F1 over the windows, per site, model and history,
+    # and the best value per site, which the paper reports (about 0.4 and 0.6).
+    pf = res.groupby(["node", "model", "history_days"])["peak_f1"].mean().round(3).reset_index()
+    pf.to_csv(HERE / "cold_start_peak_f1.csv", index=False)
+    best = pf.loc[pf.groupby("node")["peak_f1"].idxmax()]
+    print("Best mean peak F1 per site:")
+    print(best.to_string(index=False))
     daily = pd.DataFrame(daily, columns=["node", "history_days", "model", "day", "abs_err", "y"])
     ci = bootstrap_gain(daily)
     ci.to_csv(HERE / "cold_start_ci.csv", index=False)
