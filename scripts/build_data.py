@@ -4,7 +4,6 @@ Reads the data repo with `git archive` (no checkout needed) and writes
 data/{level}_{site}_{class}.parquet for level in {5min, daily}.
 """
 import io, subprocess, sys, tarfile
-from collections import defaultdict
 from pathlib import Path
 import pandas as pd
 
@@ -33,17 +32,12 @@ def main():
     ensure_repo()
     proc = subprocess.Popen(["git", "-C", str(REPO), "archive", COMMIT, "full", "hourly"],
                             stdout=subprocess.PIPE)
-    parts = defaultdict(list)
-    with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
-        for m in tar:
-            if not m.isfile() or not m.name.endswith(".csv"):
-                continue
-            p = m.name.split("/")
-            level = "daily" if p[0] == "full" else "5min"
-            site = p[1]
-            cls = p[2].removesuffix(".csv")
-            parts[(level, site, cls)].append(tar.extractfile(m).read())
-    for (level, site, cls), blobs in sorted(parts.items()):
+    # The archive lists each feed's CSVs contiguously, so write a feed as soon as the
+    # key changes instead of holding every blob in memory (a 4 GB box ran out).
+    key, blobs = None, []
+
+    def flush(key, blobs):
+        level, site, cls = key
         df = pd.concat([pd.read_csv(io.BytesIO(b)) for b in blobs], ignore_index=True)
         df = df.rename(columns={"aggregate from": "t0", "aggregate to": "t1", "total count": "count"})
         df["t0"] = pd.to_datetime(df["t0"]); df["t1"] = pd.to_datetime(df["t1"])
@@ -52,7 +46,20 @@ def main():
         df = df.drop_duplicates("t0", keep="last")
         df.to_parquet(OUT / f"{level}_{site}_{cls}.parquet", index=False)
         print(f"{level:6} {site:34} {cls:13} rows={len(df):7} dups={dups:5} "
-              f"{df.t0.min():%Y-%m-%d} to {df.t0.max():%Y-%m-%d} total={df['count'].sum():,}")
+              f"{df.t0.min():%Y-%m-%d} to {df.t0.max():%Y-%m-%d} total={df['count'].sum():,}", flush=True)
+
+    with tarfile.open(fileobj=proc.stdout, mode="r|") as tar:
+        for m in tar:
+            if not m.isfile() or not m.name.endswith(".csv"):
+                continue
+            p = m.name.split("/")
+            k = ("daily" if p[0] == "full" else "5min", p[1], p[2].removesuffix(".csv"))
+            if k != key and blobs:
+                flush(key, blobs); blobs = []
+            key = k
+            blobs.append(tar.extractfile(m).read())
+    if blobs:
+        flush(key, blobs)
     proc.wait()
     (OUT / "COMMIT").write_text(COMMIT + "\n")
 
