@@ -160,7 +160,8 @@ def busy_eval(k, label, mode, h=3):
             aucs.append(roc_auc_score(yb.iloc[s], pr.iloc[s]))
     hit = pr >= 0.5; tp = (hit & (yb == 1)).sum()
     return {"AUC [95% CI]": f"{roc_auc_score(yb, pr):.2f} [{np.percentile(aucs, 2.5):.2f}, {np.percentile(aucs, 97.5):.2f}]",
-            "precision": tp / max(hit.sum(), 1), "recall": tp / max(yb.sum(), 1), "days": len(yb)}
+            "precision": tp / max(hit.sum(), 1), "recall": tp / max(yb.sum(), 1), "days": len(yb),
+            "busy days": int(yb.sum()), "flagged": int(hit.sum())}
 
 
 def main():
