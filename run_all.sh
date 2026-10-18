@@ -7,6 +7,7 @@
 set -e
 cd "$(dirname "$0")/scripts"
 P=${PYTHON:-../.venv/bin/python}
+case $P in /*) ;; *) P=$(cd "$(dirname "$P")" && pwd)/$(basename "$P");; esac   # absolute, for the cd below
 $P build_data.py          # data/*.parquet from the pinned commit b89bc2c
 $P get_weather.py         # Open-Meteo archive (observed)
 $P get_forecasts.py       # Open-Meteo previous-runs API, leads 1 to 7
