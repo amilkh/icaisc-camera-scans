@@ -16,6 +16,13 @@ COLS = ["timestamp", "snow_depth_cm", "snowfall_1h_cm", "temp_c", "precip_1h_mm"
 
 STATIONS = {"station": "fukuicity", "tojinbo": "mikuni", "rainbow": "mihama"}
 
+if not HG.exists():
+    # The merged files data/jma_<site>.parquet are committed (JMA observations are public
+    # data; see README "Weather notes"), so a fresh clone can skip this step.
+    missing = [s for s in STATIONS if not (DATA / f"jma_{s}.parquet").exists()]
+    print("JMA source files not found; using the committed data/jma_*.parquet" + (f" (missing: {missing})" if missing else ""))
+    raise SystemExit(1 if missing else 0)
+
 for site, st in STATIONS.items():
     base = pd.read_csv(HG / f"jma_{st}_hourly_8.csv", parse_dates=["timestamp"])
     raws = sorted(glob.glob(str(DATA / "jma" / f"{st}_rawdata" / "*.csv")))

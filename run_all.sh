@@ -1,7 +1,9 @@
 #!/bin/sh
 # Reproduce every table and figure in the paper from the pinned open data.
-# Needs: a clone of code4fukui/fukui-kanko-people-flow-data (PF_REPO), Python 3.12,
-# `pip install -r requirements.txt`, and network for Open-Meteo and JMA.
+# Needs: Python 3.12, `pip install -r requirements.txt`, git and network. build_data.py
+# clones code4fukui/fukui-kanko-people-flow-data into data/pf_repo unless PF_REPO or
+# ~/active/fukui-kanko-people-flow-data exists; JMA observations are committed as
+# data/jma_*.parquet (get_jma.py rebuilds them only where the source files exist).
 set -e
 cd "$(dirname "$0")/scripts"
 P=${PYTHON:-../.venv/bin/python}
@@ -17,6 +19,8 @@ $P scan04.py              # Fig. 3 and busy-day AUC by lead
 $P scan05.py              # Tables IV and VI, nested tuning
 $P scan06.py              # faces vs plates paragraph
 $P scan07.py              # window sensitivity, faces recall
+$P scan08_data_facts.py   # Data-section facts (outages, detections per visitor, faces)
+$P scan09_faces_warning_counts.py  # faces warning day counts
 $P fig_timeseries.py      # Fig. 2
 $P fig_leadtime.py        # Fig. 3
-# Cold start (Table VII, Fig. 4): see coldstart/README.md
+cd .. && $P coldstart/cold_start.py   # cold start (Table VI/VII, Fig. 4); see coldstart/README.md
