@@ -17,4 +17,7 @@ Result: every output file the paper cites reproduced byte-for-byte, except:
 The Open-Meteo rows differ because `get_weather.py` fetches the live archive, which is
 revised after the fact; the paper's forecast results use the previous-runs archive, which
 reproduced exactly. The cold-start step (`coldstart/cold_start.py`) ran separately after a
-path fix in run_all.sh (be513fd); see the note below once it completes.
+path fix in run_all.sh (be513fd): `cold_start_ci.csv` (Fig. 4 and every cold-start number
+in the paper) reproduced byte-for-byte; `cold_start_results.csv` and `cold_start_peak_f1.csv`
+differ only in the last floating-point digits (best peak F1 0.429 and 0.628 against the
+committed 0.428 and 0.627, both "about 0.4 and 0.6" in the text).
